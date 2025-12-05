@@ -1,0 +1,85 @@
+# ---------------------------------------------------------
+# BALANCED ASSIGNMENT OF HOUSEHOLDS TO NEAREST TAPS BY DEMAND
+# ---------------------------------------------------------
+
+from qgis.core import QgsProject
+import math
+
+# Layer names
+hh_layer = QgsProject.instance().mapLayersByName("Households_dma1_46n")[0]
+tap_layer = QgsProject.instance().mapLayersByName("Points_100m")[0]
+
+# Field names
+demand_field = "Demand_Res"
+hh_id_field = "hh_id"
+assigned_field = "assigned_tap"
+tap_id_field = "tap_id"
+
+# Step 1: Gather tap coordinates
+taps = []
+for feat in tap_layer.getFeatures():
+    taps.append({
+        "id": feat[tap_id_field],
+        "geom": feat.geometry()
+    })
+
+# Step 2: Gather households with geometry + demand
+households = []
+total_demand = 0
+
+for feat in hh_layer.getFeatures():
+    d = float(feat[demand_field])
+    households.append({
+        "feat": feat,
+        "id": feat[hh_id_field],
+        "demand": d,
+        "geom": feat.geometry()
+    })
+    total_demand += d
+
+# Demand target per tap
+target = total_demand / len(taps)
+print("Target demand per tap:", target)
+
+# Step 3: Compute nearest tap order for every household
+for h in households:
+    h["tap_rank"] = sorted(
+        taps,
+        key=lambda t: h["geom"].distance(t["geom"])
+    )
+
+# Step 4: Sort households by demand (largest first gives better balancing)
+households.sort(key=lambda x: -x["demand"])
+
+# Step 5: Assign households greedily toward balanced totals
+tap_load = {t["id"]: 0 for t in taps}
+assignments = {}
+
+for h in households:
+    # Try taps in nearest-first order
+    for t in h["tap_rank"]:
+        if tap_load[t["id"]] + h["demand"] <= target * 1.25:  # allow 25% tolerance
+            assignments[h["id"]] = t["id"]
+            tap_load[t["id"]] += h["demand"]
+            break
+    else:
+        # If all exceed limit, assign to nearest regardless
+        nearest = h["tap_rank"][0]["id"]
+        assignments[h["id"]] = nearest
+        tap_load[nearest] += h["demand"]
+
+# Step 6: Write assignments to HH layer
+hh_layer.startEditing()
+
+for feat in hh_layer.getFeatures():
+    hh_id = feat[hh_id_field]
+    if hh_id in assignments:
+        hh_layer.changeAttributeValue(
+            feat.id(),
+            hh_layer.fields().indexOf(assigned_field),
+            assignments[hh_id]
+        )
+
+hh_layer.commitChanges()
+
+print("Done! Assigned households to taps.")
