@@ -1,0 +1,29 @@
+import geopandas as gpd
+from shapely.geometry import Point
+from itertools import combinations
+import pandas as pd
+
+# Load shapefile
+gdf = gpd.read_file("F:/SHAPEFILES/Scheme Locations/Nagaon.shp")
+
+# Reproject to metric CRS (e.g., UTM)
+gdf = gdf.to_crs(epsg=32646)  # Use your area's UTM EPSG
+
+# Store pairs with distance < 400
+close_pairs = []
+
+# Brute force check all pairs
+for i, j in combinations(range(len(gdf)), 2):
+    dist = gdf.geometry[i].distance(gdf.geometry[j])
+    if dist < 400:
+        close_pairs.append({
+            'IMIS_ID_1': gdf.iloc[i]['imis_id'] if 'imis_id' in gdf.columns else i,
+            'IMIS_ID_2': gdf.iloc[j]['imis_id'] if 'imis_id' in gdf.columns else j,
+            'Distance': dist
+        })
+
+# Convert to DataFrame
+df = pd.DataFrame(close_pairs)
+
+# Save to CSV
+df.to_csv("close_points.csv", index=False)
