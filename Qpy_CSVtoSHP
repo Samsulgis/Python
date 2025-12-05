@@ -1,0 +1,52 @@
+import os
+from qgis.core import (
+    QgsVectorLayer,
+    QgsCoordinateReferenceSystem,
+    QgsVectorFileWriter,
+    QgsCoordinateTransformContext
+)
+
+# === USER INPUTS ===
+csv_folder = r"F:/Excel/Litholog data/Tinsukia"
+output_folder = r"F:/Excel/Litholog data/Tinsukia/Output_SHPs"
+x_field = "Longitude"
+y_field = "Latitude"
+crs = QgsCoordinateReferenceSystem("EPSG:4326")  # WGS84
+
+# === Coordinate Transform Context ===
+transform_context = QgsCoordinateTransformContext()
+
+# === LOOP OVER FILES ===
+for file in os.listdir(csv_folder):
+    if file.endswith(".csv"):
+        csv_path = os.path.join(csv_folder, file)
+        layer_name = os.path.splitext(file)[0]
+
+        uri = f"file:///{csv_path}?delimiter=,&xField={x_field}&yField={y_field}&crs=EPSG:4326"
+        vlayer = QgsVectorLayer(uri, layer_name, "delimitedtext")
+
+        if not vlayer.isValid():
+            print(f"❌ Failed to load: {file}")
+            continue
+
+        out_path = os.path.join(output_folder, layer_name + ".shp")
+
+        # Set up save options
+        save_options = QgsVectorFileWriter.SaveVectorOptions()
+        save_options.driverName = "ESRI Shapefile"
+        save_options.fileEncoding = "UTF-8"
+
+        # Save the layer to shapefile
+        result, error_message = QgsVectorFileWriter.writeAsVectorFormatV2(
+            vlayer,
+            out_path,
+            transform_context,
+            save_options
+        )
+
+        if result == QgsVectorFileWriter.NoError:
+            print(f"✅ Converted: {file} → {layer_name}.shp")
+        else:
+            print(f"⚠️ Failed to save {file} | Reason: {error_message}")
+
+
