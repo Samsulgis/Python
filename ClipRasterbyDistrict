@@ -1,0 +1,42 @@
+import os
+from qgis.core import QgsVectorLayer, QgsProject
+
+# Set your paths
+input_raster = "F:/Groundwater Mapping/Raster/idw2.tif"
+districts_shp = "F:/Groundwater Mapping/Cleaned/Assam_dist.shp"
+output_folder = "F:/Groundwater Mapping/Raster/Clipped_By_District"
+
+# Make sure output folder exists
+os.makedirs(output_folder, exist_ok=True)
+
+# Load district shapefile
+districts_layer = QgsVectorLayer(districts_shp, "Districts", "ogr")
+if not districts_layer.isValid():
+    raise Exception("District shapefile failed to load!")
+
+# Loop through each district
+for feature in districts_layer.getFeatures():
+    district_name = feature['name'].replace(" ", "_").replace("/", "_")
+    output_path = os.path.join(output_folder, f"{district_name}.tif")
+
+    # Create temporary layer with just this district
+    district_single = QgsVectorLayer("Polygon?crs=" + districts_layer.crs().authid(), district_name, "memory")
+    district_single_data = district_single.dataProvider()
+    district_single_data.addAttributes(districts_layer.fields())
+    district_single.updateFields()
+    district_single_data.addFeatures([feature])
+
+    # Run clip algorithm
+    processing.run("gdal:cliprasterbymasklayer", {
+        'INPUT': input_raster,
+        'MASK': district_single,
+        'SOURCE_CRS': None,
+        'TARGET_CRS': None,
+        'NODATA': None,
+        'ALPHA_BAND': False,
+        'CROP_TO_CUTLINE': True,
+        'KEEP_RESOLUTION': True,
+        'OUTPUT': output_path
+    })
+
+    print(f"✅ Saved: {output_path}")
